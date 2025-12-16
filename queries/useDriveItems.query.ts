@@ -8,6 +8,7 @@ import { validate as validateUUID } from "uuid"
 import sqlite from "@/lib/sqlite"
 import useRefreshOnFocus from "@/hooks/useRefreshOnFocus"
 import { sortParams } from "@/lib/utils"
+import mmkvInstance from "@/lib/mmkv"
 
 export const BASE_QUERY_KEY = "useDriveItemsQuery"
 export const FETCH_DRIVE_ITEMS_POSSIBLE_OF: string[] = [
@@ -56,10 +57,21 @@ export async function fetchData(params: UseDriveItemsQueryParams): Promise<Drive
 		}
 	}
 
-	const items = (await nodeWorker.proxy("fetchCloudItems", params)).map(item => ({
+	let items = (await nodeWorker.proxy("fetchCloudItems", params)).map(item => ({
 		...item,
 		thumbnail: cache.availableThumbnails.get(item.uuid)
 	}))
+
+	// Optionally hide files/directories starting with a dot (e.g. .filen)
+	try {
+		const hideDotfiles = mmkvInstance.getBoolean("hideDotfiles")
+		if (hideDotfiles) {
+			// filter out items whose name starts with '.'
+			items = items.filter(item => !item.name?.startsWith("."))
+		}
+	} catch (e) {
+		// ignore mmkv errors and show all items by default
+	}
 
 	for (const item of items) {
 		if (item.type === "directory") {

@@ -7,7 +7,7 @@ import { createDropdownItem, createDropdownSubMenu } from "@/components/nativewi
 import { useDriveStore } from "@/stores/drive.store"
 import type { DropdownItem, DropdownSubMenu } from "@/components/nativewindui/DropdownMenu/types"
 import { useRouter, usePathname } from "expo-router"
-import { useMMKVString } from "react-native-mmkv"
+import { useMMKVString, useMMKVBoolean } from "react-native-mmkv"
 import { useGridMode } from "@/hooks/useGridMode"
 import mmkvInstance from "@/lib/mmkv"
 import { getPreviewType } from "@/lib/utils"
@@ -15,6 +15,7 @@ import type { OrderByType } from "@/lib/itemSorter"
 import { useShallow } from "zustand/shallow"
 import { Platform } from "react-native"
 import useDriveItemsQuery from "@/queries/useDriveItems.query"
+import { driveItemsQueryRefetch } from "@/queries/useDriveItems.query"
 import useNetInfo from "@/hooks/useNetInfo"
 import driveBulkService from "@/services/driveBulk.service"
 import alerts from "@/lib/alerts"
@@ -103,6 +104,7 @@ function getUISortOption(orderBy?: OrderByType): UISortOption | undefined {
 export const Dropdown = memo(({ queryParams }: { queryParams: FetchCloudItemsParams }) => {
 	const { colors } = useColorScheme()
 	const [orderBy, setOrderBy] = useMMKVString("orderBy", mmkvInstance) as [OrderByType | undefined, (value: OrderByType) => void]
+	const [hideDotfiles = true, setHideDotfiles] = useMMKVBoolean("hideDotfiles", mmkvInstance) as [boolean | undefined, (value: boolean) => void]
 	const { push: routerPush } = useRouter()
 	const [gridModeEnabled, setGridModeEnabled] = useGridMode(queryParams.parent)
 	const selectedItemsCount = useDriveStore(useShallow(state => state.selectedItems.length))
@@ -657,6 +659,18 @@ export const Dropdown = memo(({ queryParams }: { queryParams: FetchCloudItemsPar
 								  }
 					})
 				)
+
+				// Toggle to hide files and folders starting with a dot
+				items.push(
+					createDropdownItem({
+						actionKey: "toggleHideDotfiles",
+						title: "Hide dotfiles",
+						keepOpenOnPress: true,
+						state: {
+							checked: hideDotfiles === true
+						}
+					})
+				)
 			}
 		}
 
@@ -725,6 +739,20 @@ export const Dropdown = memo(({ queryParams }: { queryParams: FetchCloudItemsPar
 						routerPush({
 							pathname: "/transfers"
 						})
+
+						return
+					}
+
+					case "toggleHideDotfiles": {
+						// toggle and refresh items immediately
+						const newVal = !hideDotfiles
+						setHideDotfiles(newVal)
+
+						try {
+							await driveItemsQueryRefetch(queryParams)
+						} catch (e) {
+							console.warn("Failed to refetch drive items after toggling hideDotfiles", e)
+						}
 
 						return
 					}
@@ -877,7 +905,7 @@ export const Dropdown = memo(({ queryParams }: { queryParams: FetchCloudItemsPar
 				}
 			}
 		},
-		[routerPush, setGridModeEnabled, driveItems, queryParams, pathname, handleSortAction]
+		[routerPush, setGridModeEnabled, driveItems, queryParams, pathname, handleSortAction, hideDotfiles, setHideDotfiles]
 	)
 
 	return (
